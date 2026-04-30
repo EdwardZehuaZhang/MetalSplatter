@@ -70,6 +70,12 @@ public final class SplatRenderer: @unchecked Sendable {
 
         var splatCount: UInt32
         var indexedSplatCount: UInt32
+
+        // CloudTour fork — runtime render-time multipliers. Defaults of 1.0
+        // preserve upstream behavior; SplatRenderer.opacityMultiplier and
+        // SplatRenderer.pointSizeMultiplier inject overrides per frame.
+        var opacityMultiplier: Float = 1.0
+        var pointSizeMultiplier: Float = 1.0
     }
 
     // Keep in sync with Shaders.metal : UniformsArray
@@ -155,6 +161,16 @@ public final class SplatRenderer: @unchecked Sendable {
     /// as `frameDepthTexture`. Useful for snapshotting the splat output
     /// without an extra blit pass.
     public private(set) var frameColorTexture: MTLTexture?
+
+    /// CloudTour fork — global per-frame opacity multiplier in [0.1, 1.0].
+    /// Applied in the vertex stage so all splats fade uniformly without
+    /// touching per-splat alpha or re-uploading buffers. Default 1.0 = no-op.
+    public var opacityMultiplier: Float = 1.0
+
+    /// CloudTour fork — global per-frame point-size multiplier in [0.5, 2.0].
+    /// Scales the projected splat extent so the cloud reads larger or
+    /// tighter without re-sorting. Default 1.0 = no-op.
+    public var pointSizeMultiplier: Float = 1.0
 
     /// Called when a sort completes. The TimeInterval is the duration of the sort.
     public var onSortComplete: (@Sendable (TimeInterval) -> Void)? {
@@ -656,7 +672,9 @@ public final class SplatRenderer: @unchecked Sendable {
                                     tanHalfFovY: tanHalfFovY,
                                     chunkCount: chunkCount,
                                     splatCount: splatCount,
-                                    indexedSplatCount: indexedSplatCount)
+                                    indexedSplatCount: indexedSplatCount,
+                                    opacityMultiplier: opacityMultiplier,
+                                    pointSizeMultiplier: pointSizeMultiplier)
             renderState.uniforms.pointee.setUniforms(index: i, uniforms)
         }
     }

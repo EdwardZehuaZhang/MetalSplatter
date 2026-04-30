@@ -31,6 +31,14 @@ public struct SplatChunk: @unchecked Sendable {
     /// All splats in a chunk share the same SH degree.
     public let shDegree: SHDegree
 
+    /// CloudTour fork — optional per-splat 1-byte mask. Allocated on first
+    /// call to `applyMaskRange(_:value:)` (or via `enableMasks()`); nil
+    /// otherwise so legacy chunks pay no memory cost. Consumers (e.g. the
+    /// CloudTour erase/restore tools) write into this buffer to mark splats
+    /// as hidden / restored. Shader integration for the mask is out of
+    /// scope for v1; this fork release only exposes the storage + write API.
+    public private(set) var masks: MetalBuffer<UInt8>?
+
     /// Number of splats in this chunk
     public var splatCount: Int { splats.count }
 
@@ -45,6 +53,38 @@ public struct SplatChunk: @unchecked Sendable {
         self.splats = splats
         self.shCoefficients = shCoefficients
         self.shDegree = shDegree
+        self.masks = nil
+    }
+
+    /// CloudTour fork — eagerly allocate the per-splat mask buffer. The
+    /// buffer is zero-initialised so existing splats render normally. Call
+    /// once before issuing many `applyMaskRange` writes if you want to
+    /// avoid the lazy first-call allocation cost.
+    public mutating func enableMasks(device: MTLDevice) throws {
+        guard masks == nil else { return }
+        let buf = try MetalBuffer<UInt8>(device: device, capacity: splatCount)
+        buf.count = splatCount
+        for i in 0..<splatCount { buf.values[i] = 0 }
+        masks = buf
+    }
+
+    /// CloudTour fork — flip mask bytes for a contiguous range of splat
+    /// indices to `value`. Allocates the mask buffer on first call.
+    /// `range` is clipped to `0..<splatCount`; out-of-range calls no-op.
+    /// Thread safety: not internally locked. Callers running this from
+    /// the render thread alongside Metal reads must coordinate via their
+    /// own lock or by issuing the write outside of an in-flight encode.
+    public mutating func applyMaskRange(_ range: Range<Int>,
+                                        value: UInt8,
+                                        device: MTLDevice) throws {
+        try enableMasks(device: device)
+        guard let buf = masks else { return }
+        let lo = max(range.lowerBound, 0)
+        let hi = min(range.upperBound, splatCount)
+        guard lo < hi else { return }
+        for i in lo..<hi {
+            buf.values[i] = value
+        }
     }
 
     /// Creates a chunk from scene points, extracting and preserving spherical harmonics data.
@@ -88,6 +128,7 @@ public struct SplatChunk: @unchecked Sendable {
         }
 
         self.splats = splatBuffer
+        self.masks = nil
     }
 }
 

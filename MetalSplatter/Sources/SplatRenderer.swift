@@ -144,6 +144,18 @@ public final class SplatRenderer: @unchecked Sendable {
         get { sorter.onSortStart }
         set { sorter.onSortStart = newValue }
     }
+    /// CloudTour fork — most-recently rendered depth texture, captured by
+    /// `render(...)` on each frame. Consumers (e.g. hand-target raycasts in
+    /// the CloudTour erase tools) read this to convert screen-space pinch
+    /// positions into world-space points without re-issuing a depth pass.
+    /// nil until the first frame renders with a non-nil `depthTexture`.
+    public private(set) var frameDepthTexture: MTLTexture?
+
+    /// CloudTour fork — most-recently rendered color texture. Same lifecycle
+    /// as `frameDepthTexture`. Useful for snapshotting the splat output
+    /// without an extra blit pass.
+    public private(set) var frameColorTexture: MTLTexture?
+
     /// Called when a sort completes. The TimeInterval is the duration of the sort.
     public var onSortComplete: (@Sendable (TimeInterval) -> Void)? {
         get { sorter.onSortComplete }
@@ -773,6 +785,13 @@ public final class SplatRenderer: @unchecked Sendable {
                        accessTimeout: TimeInterval = 0.1,
                        sortTimeout: TimeInterval = 0.1,
                        to commandBuffer: MTLCommandBuffer) throws -> Bool {
+        // CloudTour fork — capture the textures the caller is about to draw
+        // into so consumers can read them next frame for hand-target
+        // raycasts / snapshots. Captured BEFORE the access-state guard so
+        // a skipped render still leaves the previous frame's pointers
+        // available on the public properties.
+        frameColorTexture = colorTexture
+        frameDepthTexture = depthTexture
         // Try to acquire render access, respecting exclusive access, serial render, and maxSimultaneousRenders
         let deadline = Date().addingTimeInterval(accessTimeout)
         while true {

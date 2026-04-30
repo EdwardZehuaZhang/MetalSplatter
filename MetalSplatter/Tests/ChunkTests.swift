@@ -56,6 +56,54 @@ final class ChunkTests: XCTestCase {
         XCTAssertEqual(chunk.splatCount, 5)
     }
 
+    // MARK: - CloudTour fork: per-splat mask tests
+
+    func testSplatChunkMasksDefaultNil() throws {
+        let buffer = try MetalBuffer<EncodedSplatPoint>(device: device)
+        try buffer.ensureCapacity(3)
+        for i in 0..<3 {
+            buffer.append(makeSplat(at: SIMD3<Float>(Float(i), 0, 0)))
+        }
+        let chunk = SplatChunk(splats: buffer)
+        XCTAssertNil(chunk.masks, "masks should default to nil to keep legacy chunks zero-cost")
+    }
+
+    func testEnableMasksAllocatesZeroBuffer() throws {
+        let buffer = try MetalBuffer<EncodedSplatPoint>(device: device)
+        try buffer.ensureCapacity(4)
+        for i in 0..<4 {
+            buffer.append(makeSplat(at: SIMD3<Float>(Float(i), 0, 0)))
+        }
+        var chunk = SplatChunk(splats: buffer)
+        try chunk.enableMasks(device: device)
+        XCTAssertNotNil(chunk.masks)
+        XCTAssertEqual(chunk.masks?.count, 4)
+        for i in 0..<4 {
+            XCTAssertEqual(chunk.masks?.values[i], 0)
+        }
+    }
+
+    func testApplyMaskRangeWritesAndClips() throws {
+        let buffer = try MetalBuffer<EncodedSplatPoint>(device: device)
+        try buffer.ensureCapacity(5)
+        for i in 0..<5 {
+            buffer.append(makeSplat(at: SIMD3<Float>(Float(i), 0, 0)))
+        }
+        var chunk = SplatChunk(splats: buffer)
+        try chunk.applyMaskRange(1..<3, value: 1, device: device)
+        XCTAssertEqual(chunk.masks?.values[0], 0)
+        XCTAssertEqual(chunk.masks?.values[1], 1)
+        XCTAssertEqual(chunk.masks?.values[2], 1)
+        XCTAssertEqual(chunk.masks?.values[3], 0)
+        XCTAssertEqual(chunk.masks?.values[4], 0)
+        // Out-of-range clip
+        try chunk.applyMaskRange(4..<10, value: 1, device: device)
+        XCTAssertEqual(chunk.masks?.values[4], 1)
+        // Negative lower clipped to 0
+        try chunk.applyMaskRange(-2..<1, value: 2, device: device)
+        XCTAssertEqual(chunk.masks?.values[0], 2)
+    }
+
     // MARK: - ChunkedSplatIndex Tests
 
     func testChunkedSplatIndexCreation() {

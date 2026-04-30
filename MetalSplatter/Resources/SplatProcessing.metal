@@ -198,10 +198,14 @@ FragmentIn splatVertex(Splat splat,
     const half2 relativeCoordinatesArray[] = { { -1, -1 }, { -1, 1 }, { 1, -1 }, { 1, 1 } };
     half2 relativeCoordinates = relativeCoordinatesArray[relativeVertexIndex];
     half2 screenSizeFloat = half2(uniforms.screenSize.x, uniforms.screenSize.y);
+    // CloudTour fork — pointSizeMultiplier widens / narrows projected splat
+    // extent without changing the underlying covariance.
+    half pointSizeMul = half(uniforms.pointSizeMultiplier);
     half2 projectedScreenDelta =
         (relativeCoordinates.x * half2(axis1) + relativeCoordinates.y * half2(axis2))
         * 2
         * kBoundsRadius
+        * pointSizeMul
         / screenSizeFloat;
 
     out.position = float4(projectedCenter.x + projectedScreenDelta.x * projectedCenter.w,
@@ -211,7 +215,9 @@ FragmentIn splatVertex(Splat splat,
     out.relativePosition = kBoundsRadius * relativeCoordinates;
 
     // Convert from sRGB to linear to match Metal expectations for shader color output
-    out.color = half4(sRGBToLinear(srgbColor), splat.color.a);
+    // CloudTour fork — opacityMultiplier scales the final alpha so the entire
+    // splat field can be made more transparent without rewriting per-splat data.
+    out.color = half4(sRGBToLinear(srgbColor), splat.color.a * half(uniforms.opacityMultiplier));
     return out;
 }
 

@@ -65,6 +65,14 @@ typedef struct
      */
     uint splatCount;
     uint indexedSplatCount;
+
+    // CloudTour fork — runtime render-time multipliers. Both default to 1.0
+    // for upstream-compatible behavior. opacityMultiplier scales the per-
+    // splat alpha in the vertex stage (0..1 = "show splats more transparent").
+    // pointSizeMultiplier scales the projected screen extent so splats render
+    // larger (>1) or tighter (<1) without re-sorting.
+    float opacityMultiplier;
+    float pointSizeMultiplier;
 } Uniforms;
 
 typedef struct
